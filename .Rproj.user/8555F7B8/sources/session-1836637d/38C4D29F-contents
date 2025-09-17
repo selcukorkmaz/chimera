@@ -40,7 +40,7 @@ The name comes from the mythical **Chimera**, a fusion of lion, goat, and serpen
 install.packages("devtools")
 
 # Install chimera from GitHub
-devtools::install_github("yourname/chimera")
+devtools::install_github("selcukorkmaz/chimera")
 ```
 
 ---
@@ -107,4 +107,4 @@ Contributions are welcome! Please submit issues or pull requests on GitHub.
 
 📜 **License**
 
-MIT License © 2025 Selçuk Korkmaz
+MIT License
