@@ -1,0 +1,39 @@
+Package: chimera
+Type: Package
+Title: Unified Multimodal Learning for Biomedical Data in R
+Version: 0.0.9
+Authors@R: c(person("Selcuk", "Korkmaz", email="selcukorkmaz@gmail.com", role=c("aut", "cre"),
+                    comment = c(ORCID = "0000-0003-4632-6850")))
+Description: Tools to integrate and model multiple biomedical data modalities 
+  (omics, medical images, clinical text, structured metadata) with unified preprocessing, fusion strategies (early/late/hybrid), machine learning via tidymodels, and explainability using DALEX. The MVP focuses on numeric/omics, tabular clinical, and text (TF–IDF) with a lightweight image feature stub; richer encoders (e.g., CNNs) can be plugged later.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends: R (>= 4.2)
+Imports:
+    MultiAssayExperiment,
+    S4Vectors,
+    SummarizedExperiment,
+    dplyr,
+    purrr,
+    tibble,
+    tidyr,
+    recipes,
+    parsnip,
+    workflows,
+    rsample,
+    yardstick,
+    Matrix,
+    text2vec,
+    glmnet,
+    ranger,
+    DALEX
+Suggests:
+    readr,
+    ggplot2,
+    EBImage,
+    keras,
+    torch
+URL: https://github.com/selcukorkmaz/chimera
+BugReports: https://github.com/selcukorkmaz/chimera/issues

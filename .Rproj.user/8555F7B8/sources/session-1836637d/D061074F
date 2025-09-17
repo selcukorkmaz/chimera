@@ -1,0 +1,28 @@
+{
+    "id": "D061074F",
+    "path": "~/Documents/GitHub/chimera/R/task.R",
+    "project_path": "R/task.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1758110819064.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "61,0",
+        "scrollLine": "36",
+        "docOutlineVisible": "1"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1758110918,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1758110918431,
+    "read_only": false,
+    "read_only_alternatives": []
+}
