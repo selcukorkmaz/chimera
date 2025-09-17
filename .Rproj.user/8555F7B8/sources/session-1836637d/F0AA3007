@@ -3,7 +3,7 @@
     "path": "~/Documents/GitHub/chimera/DESCRIPTION",
     "project_path": "DESCRIPTION",
     "type": "dcf",
-    "hash": "366290869",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1758110381609.0,
@@ -12,15 +12,15 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "7,2",
-        "scrollLine": "1"
+        "cursorPosition": "2,52",
+        "scrollLine": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1758111207,
+    "lastKnownWriteTime": 1758114431,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1758111207594,
+    "last_content_update": 1758114431372,
     "read_only": false,
     "read_only_alternatives": []
 }

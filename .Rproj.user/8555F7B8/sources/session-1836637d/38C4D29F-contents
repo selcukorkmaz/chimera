@@ -1,7 +1,7 @@
-<img src="man/figures/chimera_mascot.png" align="right" width="95"/>
+<img src="man/figures/chimera_hex.png" align="right" width="95"/>
 
 
-# MVN: An R Package for Assessing Multivariate Normality
+# Multimodal Data Integration and Learning in R
 
 ---
 
