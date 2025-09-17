@@ -3,7 +3,6 @@
 
 # chimera: Multimodal Data Integration and Learning in R
 
----
 
 **chimera** is an R package for multimodal biomedical learning. It integrates diverse data types—omics, clinical, text, and imaging—through unified preprocessing, flexible fusion strategies (early, late, hybrid), machine learning, and explainability.
 

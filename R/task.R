@@ -40,12 +40,33 @@ chm_task <- function(mae, outcome, id_col = "sample_id"){
 #' @param name modality name present in task$modalities
 #' @param encoder a function taking (se, id_col) and returning a feature matrix/data.frame with rownames as sample ids
 #' @export
-chm_add_modality <- function(task, name, encoder){
+chm_add_modality <- function(task, name, encoder = c("numeric","text","image")) {
   stopifnot(inherits(task, "chm_task"))
   if (!name %in% task$modalities) stop("Unknown modality: ", name)
-  task$registry[[name]] <- encoder
+
+  if (is.character(encoder)) {
+    enc_fun <- switch(encoder,
+                      numeric = function(se, id_col) {
+                        X <- SummarizedExperiment::assay(se)
+                        X <- scale(as.matrix(X))
+                        tibble::as_tibble(as.data.frame(X), rownames = "..rowid..")
+                      },
+                      text = function(se, id_col) {
+                        # tf-idf code here
+                      },
+                      image = function(se, id_col) {
+                        # image stats here
+                      },
+                      stop("Unknown encoder type")
+    )
+  } else {
+    enc_fun <- encoder
+  }
+
+  task$registry[[name]] <- enc_fun
   task
 }
+
 
 #' Encode all registered modalities
 #' @export
