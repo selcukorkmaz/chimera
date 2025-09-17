@@ -1,7 +1,7 @@
 <img src="man/figures/chimera_hex.png" align="right" width="95"/>
 
 
-# Multimodal Data Integration and Learning in R
+# chimera: Multimodal Data Integration and Learning in R
 
 ---
 
