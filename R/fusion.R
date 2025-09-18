@@ -2,11 +2,11 @@
 #'
 #' @param mode one of 'early','late','hybrid'
 #' @export
-chm_fuse <- function(task, mode = c("early","late","hybrid")){
-  stopifnot(inherits(task, "chm_task"))
+grf_fuse <- function(task, mode = c("early","late","hybrid")){
+  stopifnot(inherits(task, "grf_task"))
   mode <- match.arg(mode)
   enc <- task$encodings
-  if (length(enc) == 0) stop("call chm_encode() first")
+  if (length(enc) == 0) stop("call grf_encode() first")
 
 
   # Align by id

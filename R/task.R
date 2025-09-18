@@ -4,9 +4,9 @@
 #' either; lists will be coerced to MAE with synthetic assays.
 #' @param outcome A tibble/data.frame with one column outcome (factor/numeric) and optional id column name `sample_id`.
 #' @param id_col Name of sample id column shared across modalities (default 'sample_id').
-#' @return An object of class `chm_task`.
+#' @return An object of class `grf_task`.
 #' @export
-chm_task <- function(mae, outcome, id_col = "sample_id"){
+grf_task <- function(mae, outcome, id_col = "sample_id"){
   if (inherits(mae, "MultiAssayExperiment")) {
     mae_obj <- mae
   } else if (is.list(mae)) {
@@ -30,18 +30,18 @@ chm_task <- function(mae, outcome, id_col = "sample_id"){
     encodings = list(),
     fusion = NULL,
     fit = NULL
-  ), class = "chm_task")
+  ), class = "grf_task")
 }
 
 
 #' Register a modality encoder
 #'
-#' @param task chm_task
+#' @param task grf_task
 #' @param name modality name present in task$modalities
 #' @param encoder a function taking (se, id_col) and returning a feature matrix/data.frame with rownames as sample ids
 #' @export
-chm_add_modality <- function(task, name, encoder = c("numeric","text","image")) {
-  stopifnot(inherits(task, "chm_task"))
+grf_add_modality <- function(task, name, encoder = c("numeric","text","image")) {
+  stopifnot(inherits(task, "grf_task"))
   if (!name %in% task$modalities) stop("Unknown modality: ", name)
 
   if (is.character(encoder)) {
@@ -70,8 +70,8 @@ chm_add_modality <- function(task, name, encoder = c("numeric","text","image")) 
 
 #' Encode all registered modalities
 #' @export
-chm_encode <- function(task){
-  stopifnot(inherits(task, "chm_task"))
+grf_encode <- function(task){
+  stopifnot(inherits(task, "grf_task"))
   enc <- purrr::imap(task$registry, function(enc_fun, nm){
     se <- MultiAssayExperiment::experiments(task$mae)[[nm]]
     enc_fun(se, task$id_col)

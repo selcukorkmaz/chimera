@@ -4,8 +4,8 @@
 #' @param outcome_name column name in outcome table
 #' @param family 'classification'|'regression'
 #' @export
-chm_fit <- function(task, learner, outcome_name, family = c("classification","regression")){
-  stopifnot(inherits(task, "chm_task"))
+grf_fit <- function(task, learner, outcome_name, family = c("classification","regression")){
+  stopifnot(inherits(task, "grf_task"))
   family <- match.arg(family)
   cd <- as.data.frame(MultiAssayExperiment::colData(task$mae))
   y <- cd[[outcome_name]]
@@ -36,10 +36,10 @@ chm_fit <- function(task, learner, outcome_name, family = c("classification","re
   task
 }
 
-#' Predict from a fitted chm_task
+#' Predict from a fitted grf_task
 #' @export
-chm_predict <- function(task, new_task = NULL){
-  stopifnot(inherits(task, "chm_task"))
+grf_predict <- function(task, new_task = NULL){
+  stopifnot(inherits(task, "grf_task"))
   if (is.null(task$fit)) stop("Model not fitted")
   if (!is.null(new_task)) task <- new_task
   if (task$fit$type == "single"){

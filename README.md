@@ -1,12 +1,12 @@
-<img src="man/figures/chimera_hex.png" align="right" width="95"/>
+<img src="man/figures/griffin_hex.png" align="right" width="95"/>
 
 
-# chimera: Multimodal Data Integration and Learning in R
+# griffin: Multimodal Data Integration and Learning in R
 
 
-**chimera** is an R package for multimodal biomedical learning. It integrates diverse data types—omics, clinical, text, and imaging—through unified preprocessing, flexible fusion strategies (early, late, hybrid), machine learning, and explainability.
+**griffin** is an R package for multimodal biomedical learning. It integrates diverse data types—omics, clinical, text, and imaging—through unified preprocessing, flexible fusion strategies (early, late, hybrid), machine learning, and explainability.
 
-The name comes from the mythical **Chimera**, a fusion of lion, goat, and serpent—symbolizing integration of heterogeneous modalities into one powerful model.
+The name comes from the mythical **Griffin**, a fusion of lion and eagle—symbolizing integration of heterogeneous modalities into one powerful model.
 
 ✨ **Features**
 
@@ -38,8 +38,8 @@ The name comes from the mythical **Chimera**, a fusion of lion, goat, and serpen
 # Install devtools if needed
 install.packages("devtools")
 
-# Install chimera from GitHub
-devtools::install_github("selcukorkmaz/chimera")
+# Install griffin from GitHub
+devtools::install_github("selcukorkmaz/griffin")
 ```
 
 ---
@@ -47,7 +47,7 @@ devtools::install_github("selcukorkmaz/chimera")
 🚀 **Example**
 
 ```r
-library(chimera)
+library(griffin)
 library(parsnip)
 library(MultiAssayExperiment)
 
@@ -71,19 +71,19 @@ mae <- MultiAssayExperiment(
   colData = DataFrame(data.frame(class = y, row.names = id))
 )
 
-task <- chm_task(mae, outcome = as.data.frame(colData(mae)))
-task <- chm_add_modality(task, "omics", encoder_numeric(n_components = 10))
-task <- chm_add_modality(task, "notes", encoder_text_tfidf(text_col = "text"))
-task <- chm_encode(task)
-task <- chm_fuse(task, mode = "early")
+task <- grf_task(mae, outcome = as.data.frame(colData(mae)))
+task <- grf_add_modality(task, "omics", encoder_numeric(n_components = 10))
+task <- grf_add_modality(task, "notes", encoder_text_tfidf(text_col = "text"))
+task <- grf_encode(task)
+task <- grf_fuse(task, mode = "early")
 
 learner <- logistic_reg(penalty = 0.01, mixture = 1) %>%
   set_engine("glmnet") %>%
   set_mode("classification")
 
-task <- chm_fit(task, learner, outcome_name = "class", family = "classification")
+task <- grf_fit(task, learner, outcome_name = "class", family = "classification")
 
-expl <- chm_explain(task)
+expl <- grf_explain(task)
 expl
 ```
 

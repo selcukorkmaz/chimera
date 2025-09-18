@@ -1,7 +1,7 @@
 #' Explain a fitted multimodal model using DALEX
 #' @export
-chm_explain <- function(task){
-  stopifnot(inherits(task, "chm_task"))
+grf_explain <- function(task){
+  stopifnot(inherits(task, "grf_task"))
   if (is.null(task$fit)) stop("Model not fitted")
   if (task$fit$type != "single") stop("Only single-model explanation in MVP")
   wf <- task$fit$fit
@@ -14,5 +14,5 @@ chm_explain <- function(task){
     preds <- stats::predict(fit, newdata, type = if (task$fit$family=="classification") "response" else "response")
     as.numeric(preds)
   }
-  DALEX::explain(model = fit, data = x, y = y, predict_function = f, label = "chimera")
+  DALEX::explain(model = fit, data = x, y = y, predict_function = f, label = "griffin")
 }
