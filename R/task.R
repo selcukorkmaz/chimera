@@ -171,36 +171,23 @@ print.grf_task <- function(x, ...){
 #' @param name modality name present in task$modalities
 #' @param encoder a function taking (se, id_col) and returning a feature matrix/data.frame with rownames as sample ids
 #' @export
-grf_add_modality <- function(task, name, encoder = c("numeric","text","image")) {
+grf_add_modality <- function(task, name, encoder = c("numeric","tabular","text")) {
   stopifnot(inherits(task, "grf_task"))
   if (!name %in% task$modalities) stop("Unknown modality: ", name)
 
   if (is.character(encoder)) {
-    enc_fun <- switch(encoder,
-                      numeric = function(se, id_col) {
-                        X <- SummarizedExperiment::assay(se)
-                        if (!is.null(colnames(X))) {
-                          ids <- colnames(X)
-                          X <- t(as.matrix(X))
-                          rownames(X) <- ids
-                        } else if (!is.null(rownames(X))) {
-                          X <- as.matrix(X)
-                        } else {
-                          stop("Assay must provide sample identifiers")
-                        }
-                        X <- scale(X)
-                        tibble::as_tibble(as.data.frame(X), rownames = "..rowid..")
-                      },
-                      text = function(se, id_col) {
-                        # tf-idf code here
-                      },
-                      image = function(se, id_col) {
-                        # image stats here
-                      },
-                      stop("Unknown encoder type")
+    encoder <- match.arg(encoder)
+    enc_fun <- switch(
+      encoder,
+      numeric = grf_encoder_numeric,
+      tabular = grf_encoder_tabular,
+      text = grf_encoder_text,
+      stop("Unknown encoder keyword")
     )
-  } else {
+  } else if (is.function(encoder)) {
     enc_fun <- encoder
+  } else {
+    stop("encoder must be a keyword or function")
   }
 
   task$registry[[name]] <- enc_fun
@@ -212,11 +199,148 @@ grf_add_modality <- function(task, name, encoder = c("numeric","text","image")) 
 #' @export
 grf_encode <- function(task){
   stopifnot(inherits(task, "grf_task"))
+  if (length(task$registry) == 0) stop("No modality encoders registered; use grf_add_modality() first")
+
+  task_ids <- rownames(MultiAssayExperiment::colData(task$mae))
   enc <- purrr::imap(task$registry, function(enc_fun, nm){
     se <- MultiAssayExperiment::experiments(task$mae)[[nm]]
-    enc_fun(se, task$id_col)
+    if (is.null(se)) {
+      stop("Modality not found in task: ", nm)
+    }
+    encoded <- enc_fun(se, task$id_col)
+    encoded_tbl <- grf_validate_encoding_output(encoded, nm)
+    missing_ids <- setdiff(encoded_tbl$`..rowid..`, task_ids)
+    if (length(missing_ids)) {
+      stop(
+        "Encoder for modality '", nm, "' returned sample ids not present in the task: ",
+        paste(missing_ids, collapse = ", ")
+      )
+    }
+    encoded_tbl
   })
   task$encodings <- enc
+  task$fusion <- NULL
+  task$fit <- NULL
   task
 }
 
+
+# Internal helpers ---------------------------------------------------------
+
+grf_encoder_numeric <- function(se, id_col){
+  samples <- grf_modality_samples(se)
+  if (!is.numeric(samples)) {
+    stop("Numeric encoder requires numeric assay values")
+  }
+  scaled <- scale(samples)
+  scaled[is.na(scaled)] <- 0
+  grf_matrix_to_tibble(scaled)
+}
+
+
+grf_encoder_tabular <- function(se, id_col){
+  samples <- grf_modality_samples(se)
+  grf_matrix_to_tibble(samples)
+}
+
+
+grf_encoder_text <- function(se, id_col){
+  samples <- grf_modality_samples(se)
+  sample_ids <- rownames(samples)
+  if (is.null(sample_ids)) stop("Text encoder requires sample identifiers")
+
+  text_vec <- vapply(seq_along(sample_ids), function(i){
+    row <- samples[i, , drop = TRUE]
+    row <- row[!is.na(row)]
+    row <- trimws(as.character(row))
+    row <- row[nzchar(row)]
+    if (length(row)) paste(row, collapse = " ") else ""
+  }, character(1), USE.NAMES = FALSE)
+  names(text_vec) <- sample_ids
+
+  tokens <- text2vec::itoken(text_vec, ids = sample_ids, progressbar = FALSE)
+  vocab <- text2vec::create_vocabulary(tokens)
+  if (nrow(vocab) == 0) {
+    return(tibble::tibble(`..rowid..` = sample_ids))
+  }
+  vectorizer <- text2vec::vocab_vectorizer(vocab)
+  tokens <- text2vec::itoken(text_vec, ids = sample_ids, progressbar = FALSE)
+  dtm <- text2vec::create_dtm(tokens, vectorizer)
+  tfidf <- text2vec::TfIdf$new()
+  tfidf_mat <- tfidf$fit_transform(dtm)
+  if (ncol(tfidf_mat) == 0) {
+    return(tibble::tibble(`..rowid..` = sample_ids))
+  }
+  features <- grf_matrix_to_tibble(tfidf_mat)
+  if (ncol(features) > 1) {
+    feature_cols <- names(features)[-1]
+    names(features)[-1] <- paste0("text_", feature_cols)
+  }
+  features
+}
+
+
+grf_modality_samples <- function(se){
+  mat <- SummarizedExperiment::assay(se)
+  if (is.null(mat)) stop("Modality assay is empty")
+  mat <- as.matrix(mat)
+  sample_ids <- colnames(mat)
+  if (is.null(sample_ids)) stop("Assay must provide sample identifiers in column names")
+  mat <- t(mat)
+  rownames(mat) <- sample_ids
+  mat
+}
+
+
+grf_matrix_to_tibble <- function(mat){
+  if (inherits(mat, "Matrix")) {
+    mat <- as.matrix(mat)
+  }
+  if (!is.matrix(mat)) {
+    stop("Encoder output must be matrix-like")
+  }
+  if (ncol(mat) > 0) {
+    if (is.null(colnames(mat))) {
+      colnames(mat) <- paste0("feature_", seq_len(ncol(mat)))
+    } else {
+      colnames(mat) <- make.unique(colnames(mat))
+    }
+  }
+  if (is.null(rownames(mat))) {
+    stop("Matrix must contain rownames for sample identifiers")
+  }
+  df <- tibble::rownames_to_column(as.data.frame(mat, stringsAsFactors = FALSE), "..rowid..")
+  tibble::as_tibble(df)
+}
+
+
+grf_validate_encoding_output <- function(enc, modality){
+  if (inherits(enc, "Matrix") || is.matrix(enc)) {
+    enc_tbl <- grf_matrix_to_tibble(enc)
+  } else if (tibble::is_tibble(enc)) {
+    enc_tbl <- enc
+  } else if (is.data.frame(enc)) {
+    enc_tbl <- tibble::as_tibble(enc)
+  } else {
+    stop("Encoder for modality '", modality, "' must return a tibble, data.frame, or matrix")
+  }
+
+  if (!"..rowid.." %in% names(enc_tbl)) {
+    stop("Encoder for modality '", modality, "' must include a `..rowid..` column")
+  }
+
+  enc_tbl <- dplyr::mutate(enc_tbl, `..rowid..` = as.character(`..rowid..`))
+  if (anyNA(enc_tbl$`..rowid..`)) {
+    stop("Encoder for modality '", modality, "' produced missing sample identifiers")
+  }
+  if (anyDuplicated(enc_tbl$`..rowid..`)) {
+    stop("Encoder for modality '", modality, "' must return unique sample identifiers")
+  }
+
+  feature_cols <- setdiff(names(enc_tbl), "..rowid..")
+  if (anyDuplicated(feature_cols)) {
+    stop("Encoder for modality '", modality, "' returned duplicated feature names")
+  }
+  enc_tbl <- enc_tbl[, c("..rowid..", feature_cols), drop = FALSE]
+  tibble::as_tibble(enc_tbl)
+}

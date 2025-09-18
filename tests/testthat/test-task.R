@@ -75,3 +75,33 @@ test_that("print.grf_task summarises the task", {
   expect_output(print(task), "Modalities \\(1\\): omics")
   expect_output(print(task), "Outcome columns: label")
 })
+
+test_that("built-in encoders produce tibbles with sample ids", {
+  set.seed(99)
+  ids <- sprintf("S%02d", 1:3)
+  modalities <- list(
+    omics = matrix(rnorm(length(ids) * 4), nrow = 4, dimnames = list(paste0("g", 1:4), ids)),
+    clinical = data.frame(sample_id = ids, age = c(40, 55, 63), score = rnorm(length(ids))),
+    notes = data.frame(sample_id = ids, text = c("tumor growth", "benign lesion", "tumor regression"))
+  )
+  outcome <- data.frame(sample_id = ids, status = factor(c("A", "B", "A")))
+
+  task <- grf_task(modalities, outcome)
+  task <- grf_add_modality(task, "omics", "numeric")
+  task <- grf_add_modality(task, "clinical", "tabular")
+  task <- grf_add_modality(task, "notes", "text")
+
+  task <- grf_encode(task)
+
+  expect_true(tibble::is_tibble(task$encodings$omics))
+  expect_true(tibble::is_tibble(task$encodings$clinical))
+  expect_true(tibble::is_tibble(task$encodings$notes))
+
+  expect_setequal(task$encodings$omics$`..rowid..`, ids)
+  expect_setequal(task$encodings$clinical$`..rowid..`, ids)
+  expect_setequal(task$encodings$notes$`..rowid..`, ids)
+
+  expect_gt(ncol(task$encodings$omics), 1)
+  expect_true(ncol(task$encodings$clinical) >= 1)
+  expect_true(ncol(task$encodings$notes) >= 1)
+})
