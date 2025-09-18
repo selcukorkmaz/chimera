@@ -105,3 +105,44 @@ test_that("built-in encoders produce tibbles with sample ids", {
   expect_true(ncol(task$encodings$clinical) >= 1)
   expect_true(ncol(task$encodings$notes) >= 1)
 })
+
+test_that("grf_fuse builds early, late, and hybrid structures", {
+  ids <- sprintf("S%02d", 1:3)
+  modalities <- list(
+    omics = matrix(rnorm(length(ids) * 5), nrow = 5, dimnames = list(paste0("g", 1:5), ids)),
+    clinical = data.frame(sample_id = ids, age = c(41, 59, 66), score = rnorm(length(ids))),
+    notes = data.frame(sample_id = ids, text = c("tumor growth rapid", "benign lesion noted", "tumor shrinking"))
+  )
+  outcome <- data.frame(sample_id = ids, status = factor(c("A", "B", "A")))
+
+  task <- grf_task(modalities, outcome)
+  task <- grf_add_modality(task, "omics", "numeric")
+  task <- grf_add_modality(task, "clinical", "tabular")
+  task <- grf_add_modality(task, "notes", "text")
+  task <- grf_encode(task)
+
+  early <- grf_fuse(task, "early")
+  expect_equal(early$fusion$mode, "early")
+  expect_null(early$fusion$per_modality)
+  expect_true(tibble::is_tibble(early$fusion$X))
+  expect_equal(early$fusion$X$`..rowid..`, ids)
+  expect_true(all(grepl("^(omics|clinical|notes)__", setdiff(names(early$fusion$X), "..rowid.."))))
+
+  late <- grf_fuse(task, "late")
+  expect_equal(late$fusion$mode, "late")
+  expect_length(late$fusion$per_modality, 3)
+  expect_named(late$fusion$per_modality, c("omics", "clinical", "notes"))
+  expect_true(tibble::is_tibble(late$fusion$X))
+  expect_equal(late$fusion$X$`..rowid..`, ids)
+  purrr::iwalk(late$fusion$per_modality, function(tbl, nm){
+    expect_true(tibble::is_tibble(tbl))
+    expect_equal(tbl$`..rowid..`, ids)
+    expect_true(all(grepl(paste0("^", nm, "__"), setdiff(names(tbl), "..rowid.."))))
+  })
+  expect_true(all(names(late$fusion$X) %in% c("..rowid..", unlist(lapply(late$fusion$per_modality, names)))))
+
+  hybrid <- grf_fuse(task, "hybrid")
+  expect_equal(hybrid$fusion$mode, "hybrid")
+  expect_length(hybrid$fusion$per_modality, 3)
+  expect_equal(hybrid$fusion$X, late$fusion$X)
+})

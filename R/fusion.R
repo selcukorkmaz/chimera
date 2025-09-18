@@ -8,20 +8,36 @@ grf_fuse <- function(task, mode = c("early","late","hybrid")){
   enc <- task$encodings
   if (length(enc) == 0) stop("call grf_encode() first")
 
+  task_ids <- rownames(MultiAssayExperiment::colData(task$mae))
+  aligned <- purrr::imap(enc, function(tbl, nm){
+    grf_align_encoding(tbl, nm, task_ids)
+  })
 
-  # Align by id
-  ids <- Reduce(intersect, lapply(enc, function(x) x$`..rowid..`))
-  enc <- lapply(enc, function(x) dplyr::filter(x, `..rowid..` %in% ids))
-
+  combined <- purrr::reduce(aligned, function(acc, tbl){
+    dplyr::full_join(acc, tbl, by = "..rowid..")
+  })
+  combined <- combined[, c("..rowid..", setdiff(names(combined), "..rowid..")), drop = FALSE]
 
   if (mode == "early"){
-    X <- Reduce(function(a,b) dplyr::full_join(a,b, by = "..rowid.."), enc)
-    task$fusion <- list(mode = mode, X = X, stacks = NULL)
-  } else if (mode == "late"){
-    task$fusion <- list(mode = mode, per_modality = enc, meta = NULL)
-  } else if (mode == "hybrid"){
-    X <- Reduce(function(a,b) dplyr::full_join(a,b, by = "..rowid.."), enc)
-    task$fusion <- list(mode = mode, X = X, per_modality = enc)
+    task$fusion <- list(mode = mode, X = combined, per_modality = NULL)
+  } else {
+    task$fusion <- list(mode = mode, X = combined, per_modality = aligned)
   }
+  task$fit <- NULL
   task
+}
+
+
+grf_align_encoding <- function(tbl, modality, ids){
+  if (!"..rowid.." %in% names(tbl)) {
+    stop("Encoded modality '", modality, "' is missing the `..rowid..` column")
+  }
+  tbl <- dplyr::mutate(tbl, `..rowid..` = as.character(`..rowid..`))
+  feature_cols <- setdiff(names(tbl), "..rowid..")
+  if (length(feature_cols)) {
+    tbl <- dplyr::rename_with(tbl, ~paste0(modality, "__", .x), .cols = feature_cols)
+  }
+  scaffold <- tibble::tibble(`..rowid..` = ids)
+  joined <- dplyr::left_join(scaffold, tbl, by = "..rowid..")
+  tibble::as_tibble(joined)
 }
