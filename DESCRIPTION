@@ -1,6 +1,6 @@
 Package: griffin
 Type: Package
-Title: Griffin: Multimodal Data Integration and Learning in R
+Title: Multimodal Data Integration and Learning in R
 Version: 0.0.9
 Authors@R: c(person("Selcuk", "Korkmaz", email="selcukorkmaz@gmail.com", role=c("aut", "cre"),
                     comment = c(ORCID = "0000-0003-4632-6850")))

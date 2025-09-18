@@ -4,7 +4,7 @@
 \alias{grf_add_modality}
 \title{Register a modality encoder}
 \usage{
-grf_add_modality(task, name, encoder)
+grf_add_modality(task, name, encoder = c("numeric", "text", "image"))
 }
 \arguments{
 \item{task}{grf_task}
