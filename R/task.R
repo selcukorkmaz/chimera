@@ -179,9 +179,9 @@ grf_add_modality <- function(task, name, encoder = c("numeric","tabular","text")
     encoder <- match.arg(encoder)
     enc_fun <- switch(
       encoder,
-      numeric = grf_encoder_numeric,
-      tabular = grf_encoder_tabular,
-      text = grf_encoder_text,
+      numeric = grf_encoder_numeric(),
+      tabular = grf_encoder_tabular(),
+      text = grf_encoder_text(),
       stop("Unknown encoder keyword")
     )
   } else if (is.function(encoder)) {
@@ -227,56 +227,178 @@ grf_encode <- function(task){
 
 # Internal helpers ---------------------------------------------------------
 
-grf_encoder_numeric <- function(se, id_col){
-  samples <- grf_modality_samples(se)
-  if (!is.numeric(samples)) {
-    stop("Numeric encoder requires numeric assay values")
+grf_encoder_numeric <- function(pca_k = NULL){
+  if (!is.null(pca_k)) {
+    if (!is.numeric(pca_k) || length(pca_k) != 1 || is.na(pca_k) || pca_k <= 0) {
+      stop("`pca_k` must be a positive integer when supplied")
+    }
+    pca_k <- as.integer(pca_k)
   }
-  scaled <- scale(samples)
-  scaled[is.na(scaled)] <- 0
-  grf_matrix_to_tibble(scaled)
+
+  function(se, id_col){
+    samples <- grf_modality_samples(se)
+    if (!is.numeric(samples)) {
+      stop("Numeric encoder requires numeric assay values")
+    }
+
+    sample_ids <- rownames(samples)
+    if (is.null(sample_ids)) {
+      stop("Numeric modality is missing sample identifiers")
+    }
+
+    if (ncol(samples) == 0) {
+      return(grf_matrix_to_tibble(grf_empty_feature_matrix(sample_ids)))
+    }
+
+    scaled <- grf_scale_matrix(samples)
+
+    if (!is.null(pca_k)) {
+      max_rank <- min(ncol(scaled), nrow(scaled) - 1)
+      if (!is.na(max_rank) && max_rank > 0) {
+        k <- min(pca_k, max_rank)
+        scaled_for_pca <- scaled
+        scaled_for_pca[is.na(scaled_for_pca)] <- 0
+        pca <- stats::prcomp(scaled_for_pca, center = FALSE, scale. = FALSE, rank. = k)
+        pcs <- pca$x
+        if (!is.null(pcs) && ncol(pcs) > 0) {
+          k <- min(k, ncol(pcs))
+          pcs <- pcs[, seq_len(k), drop = FALSE]
+          colnames(pcs) <- paste0("PC", seq_len(ncol(pcs)))
+          return(grf_matrix_to_tibble(pcs))
+        }
+      }
+    }
+
+    grf_matrix_to_tibble(scaled)
+  }
 }
 
 
-grf_encoder_tabular <- function(se, id_col){
-  samples <- grf_modality_samples(se)
-  grf_matrix_to_tibble(samples)
+grf_encoder_tabular <- function(){
+  function(se, id_col){
+    samples <- grf_modality_samples(se)
+    sample_ids <- rownames(samples)
+    if (is.null(sample_ids)) {
+      stop("Tabular modality is missing sample identifiers")
+    }
+
+    df <- as.data.frame(samples, stringsAsFactors = FALSE)
+    if (!ncol(df)) {
+      return(grf_matrix_to_tibble(grf_empty_feature_matrix(sample_ids)))
+    }
+
+    numeric_cols <- list()
+    cat_mats <- list()
+
+    for (nm in names(df)) {
+      prepared <- grf_tabular_prepare_column(df[[nm]])
+      if (prepared$type == "numeric") {
+        numeric_cols[[nm]] <- prepared$values
+      } else if (prepared$type == "categorical") {
+        dummy <- grf_tabular_one_hot(prepared$values, sample_ids, nm)
+        if (!is.null(dummy)) {
+          cat_mats[[length(cat_mats) + 1L]] <- dummy
+        }
+      }
+    }
+
+    matrices <- list()
+    if (length(numeric_cols)) {
+      numeric_df <- as.data.frame(numeric_cols, stringsAsFactors = FALSE)
+      rownames(numeric_df) <- sample_ids
+      numeric_mat <- as.matrix(numeric_df)
+      if (ncol(numeric_mat) > 0) {
+        matrices <- c(matrices, list(grf_scale_matrix(numeric_mat)))
+      }
+    }
+    if (length(cat_mats)) {
+      matrices <- c(matrices, cat_mats)
+    }
+
+    if (!length(matrices)) {
+      return(grf_matrix_to_tibble(grf_empty_feature_matrix(sample_ids)))
+    }
+
+    combined <- do.call(cbind, matrices)
+    rownames(combined) <- sample_ids
+    grf_matrix_to_tibble(combined)
+  }
 }
 
 
-grf_encoder_text <- function(se, id_col){
-  samples <- grf_modality_samples(se)
-  sample_ids <- rownames(samples)
-  if (is.null(sample_ids)) stop("Text encoder requires sample identifiers")
+grf_encoder_text <- function(max_features = NULL, term_count_min = NULL, doc_prop_max = NULL){
+  if (!is.null(max_features)) {
+    if (!is.numeric(max_features) || length(max_features) != 1 || is.na(max_features) || max_features <= 0) {
+      stop("`max_features` must be a positive integer when supplied")
+    }
+    max_features <- as.integer(max_features)
+  }
+  if (!is.null(term_count_min)) {
+    if (!is.numeric(term_count_min) || length(term_count_min) != 1 || is.na(term_count_min) || term_count_min <= 0) {
+      stop("`term_count_min` must be a positive integer when supplied")
+    }
+    term_count_min <- as.integer(term_count_min)
+  }
+  if (!is.null(doc_prop_max)) {
+    if (!is.numeric(doc_prop_max) || length(doc_prop_max) != 1 || is.na(doc_prop_max) || doc_prop_max <= 0 || doc_prop_max > 1) {
+      stop("`doc_prop_max` must be a numeric value in (0, 1]")
+    }
+    doc_prop_max <- as.numeric(doc_prop_max)
+  }
 
-  text_vec <- vapply(seq_along(sample_ids), function(i){
-    row <- samples[i, , drop = TRUE]
-    row <- row[!is.na(row)]
-    row <- trimws(as.character(row))
-    row <- row[nzchar(row)]
-    if (length(row)) paste(row, collapse = " ") else ""
-  }, character(1), USE.NAMES = FALSE)
-  names(text_vec) <- sample_ids
+  function(se, id_col){
+    samples <- grf_modality_samples(se)
+    sample_ids <- rownames(samples)
+    if (is.null(sample_ids)) stop("Text encoder requires sample identifiers")
 
-  tokens <- text2vec::itoken(text_vec, ids = sample_ids, progressbar = FALSE)
-  vocab <- text2vec::create_vocabulary(tokens)
-  if (nrow(vocab) == 0) {
-    return(tibble::tibble(`..rowid..` = sample_ids))
+    df <- as.data.frame(samples, stringsAsFactors = FALSE)
+    text_cols <- names(df)[tolower(names(df)) == "text"]
+    if (!length(text_cols)) {
+      stop("Text modality must contain at least one column named 'text'")
+    }
+
+    text_df <- df[text_cols, drop = FALSE]
+    text_vec <- vapply(seq_len(nrow(text_df)), function(i){
+      row <- text_df[i, , drop = TRUE]
+      row <- row[!is.na(row)]
+      row <- trimws(as.character(row))
+      row <- row[nzchar(row)]
+      if (length(row)) paste(row, collapse = " ") else ""
+    }, character(1))
+    names(text_vec) <- sample_ids
+
+    tokens <- text2vec::itoken(text_vec, ids = sample_ids, progressbar = FALSE)
+    vocab <- text2vec::create_vocabulary(tokens)
+
+    prune_args <- list(vocab = vocab)
+    if (!is.null(term_count_min)) prune_args$term_count_min <- term_count_min
+    if (!is.null(doc_prop_max)) prune_args$doc_proportion_max <- doc_prop_max
+    if (!is.null(max_features)) prune_args$max_number_of_terms <- max_features
+    if (length(prune_args) > 1) {
+      vocab <- do.call(text2vec::prune_vocabulary, prune_args)
+    }
+
+    if (nrow(vocab) == 0) {
+      return(grf_matrix_to_tibble(grf_empty_feature_matrix(sample_ids)))
+    }
+
+    vectorizer <- text2vec::vocab_vectorizer(vocab)
+    tokens <- text2vec::itoken(text_vec, ids = sample_ids, progressbar = FALSE)
+    dtm <- text2vec::create_dtm(tokens, vectorizer)
+    tfidf <- text2vec::TfIdf$new()
+    tfidf_mat <- tfidf$fit_transform(dtm)
+
+    if (ncol(tfidf_mat) == 0) {
+      return(grf_matrix_to_tibble(grf_empty_feature_matrix(sample_ids)))
+    }
+
+    dense <- as.matrix(tfidf_mat)
+    rownames(dense) <- sample_ids
+    if (ncol(dense) > 0) {
+      colnames(dense) <- make.unique(paste0("text_", colnames(dense)))
+    }
+    grf_matrix_to_tibble(dense)
   }
-  vectorizer <- text2vec::vocab_vectorizer(vocab)
-  tokens <- text2vec::itoken(text_vec, ids = sample_ids, progressbar = FALSE)
-  dtm <- text2vec::create_dtm(tokens, vectorizer)
-  tfidf <- text2vec::TfIdf$new()
-  tfidf_mat <- tfidf$fit_transform(dtm)
-  if (ncol(tfidf_mat) == 0) {
-    return(tibble::tibble(`..rowid..` = sample_ids))
-  }
-  features <- grf_matrix_to_tibble(tfidf_mat)
-  if (ncol(features) > 1) {
-    feature_cols <- names(features)[-1]
-    names(features)[-1] <- paste0("text_", feature_cols)
-  }
-  features
 }
 
 
@@ -311,6 +433,107 @@ grf_matrix_to_tibble <- function(mat){
   }
   df <- tibble::rownames_to_column(as.data.frame(mat, stringsAsFactors = FALSE), "..rowid..")
   tibble::as_tibble(df)
+}
+
+
+grf_empty_feature_matrix <- function(sample_ids){
+  sample_ids <- as.character(sample_ids)
+  empty <- matrix(nrow = length(sample_ids), ncol = 0)
+  rownames(empty) <- sample_ids
+  empty
+}
+
+
+grf_scale_matrix <- function(mat){
+  if (inherits(mat, "Matrix")) {
+    mat <- as.matrix(mat)
+  }
+  if (!is.matrix(mat)) {
+    stop("Expected a matrix for scaling")
+  }
+  rn <- rownames(mat)
+  cn <- colnames(mat)
+  storage.mode(mat) <- "double"
+  if (!ncol(mat)) {
+    rownames(mat) <- rn
+    colnames(mat) <- cn
+    return(mat)
+  }
+  centers <- apply(mat, 2, function(x){
+    if (all(is.na(x))) return(0)
+    mean(x, na.rm = TRUE)
+  })
+  centers[is.nan(centers)] <- 0
+  scaled <- sweep(mat, 2, centers, "-")
+  scales <- apply(mat, 2, stats::sd, na.rm = TRUE)
+  scales[is.na(scales) | scales == 0] <- 1
+  scaled <- sweep(scaled, 2, scales, "/")
+  scaled[is.na(mat)] <- NA_real_
+  rownames(scaled) <- rn
+  colnames(scaled) <- cn
+  scaled
+}
+
+
+grf_tabular_prepare_column <- function(x){
+  if (inherits(x, c("Date", "POSIXct", "POSIXlt", "POSIXt"))) {
+    numeric_vals <- as.numeric(x)
+    numeric_vals[is.na(x)] <- NA_real_
+    return(list(type = "numeric", values = numeric_vals))
+  }
+  if (is.factor(x)) {
+    x <- as.character(x)
+  }
+  if (is.logical(x)) {
+    numeric_vals <- as.numeric(x)
+    numeric_vals[is.na(x)] <- NA_real_
+    return(list(type = "numeric", values = numeric_vals))
+  }
+  if (is.numeric(x)) {
+    return(list(type = "numeric", values = as.numeric(x)))
+  }
+  if (is.character(x)) {
+    trimmed <- trimws(x)
+    trimmed[trimmed == ""] <- NA_character_
+    suppressWarnings(num <- as.numeric(trimmed))
+    non_missing <- !is.na(trimmed)
+    if (any(non_missing) && all(!is.na(num[non_missing]))) {
+      num[!non_missing] <- NA_real_
+      return(list(type = "numeric", values = num))
+    }
+    if (!any(non_missing)) {
+      return(list(type = "numeric", values = rep(NA_real_, length(trimmed))))
+    }
+    return(list(type = "categorical", values = trimmed))
+  }
+  char_vals <- as.character(x)
+  char_vals <- trimws(char_vals)
+  char_vals[char_vals == ""] <- NA_character_
+  list(type = "categorical", values = char_vals)
+}
+
+
+grf_tabular_one_hot <- function(values, sample_ids, prefix){
+  values <- as.character(values)
+  values <- trimws(values)
+  values[values == ""] <- NA_character_
+  encoded <- values
+  if (anyNA(encoded)) {
+    encoded[is.na(encoded)] <- "__missing__"
+  }
+  levels <- unique(encoded)
+  if (!length(levels)) {
+    return(NULL)
+  }
+  mat <- matrix(0, nrow = length(encoded), ncol = length(levels))
+  for (i in seq_along(levels)) {
+    mat[, i] <- as.numeric(encoded == levels[i])
+  }
+  clean_levels <- levels
+  clean_levels[clean_levels == "__missing__"] <- "missing"
+  colnames(mat) <- make.unique(paste0(prefix, "__", make.names(clean_levels, unique = FALSE)))
+  rownames(mat) <- sample_ids
+  mat
 }
 
 
