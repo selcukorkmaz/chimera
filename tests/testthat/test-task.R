@@ -123,26 +123,59 @@ test_that("grf_fuse builds early, late, and hybrid structures", {
 
   early <- grf_fuse(task, "early")
   expect_equal(early$fusion$mode, "early")
-  expect_null(early$fusion$per_modality)
   expect_true(tibble::is_tibble(early$fusion$X))
-  expect_equal(early$fusion$X$`..rowid..`, ids)
+  expect_equal(nrow(early$fusion$X), length(ids))
+  expect_setequal(early$fusion$X$`..rowid..`, ids)
   expect_true(all(grepl("^(omics|clinical|notes)__", setdiff(names(early$fusion$X), "..rowid.."))))
+  expect_null(early$fusion$per_modality)
 
   late <- grf_fuse(task, "late")
   expect_equal(late$fusion$mode, "late")
+  expect_null(late$fusion$X)
   expect_length(late$fusion$per_modality, 3)
   expect_named(late$fusion$per_modality, c("omics", "clinical", "notes"))
-  expect_true(tibble::is_tibble(late$fusion$X))
-  expect_equal(late$fusion$X$`..rowid..`, ids)
   purrr::iwalk(late$fusion$per_modality, function(tbl, nm){
     expect_true(tibble::is_tibble(tbl))
-    expect_equal(tbl$`..rowid..`, ids)
-    expect_true(all(grepl(paste0("^", nm, "__"), setdiff(names(tbl), "..rowid.."))))
+    expect_equal(nrow(tbl), length(ids))
+    expect_setequal(tbl$`..rowid..`, ids)
+    expect_true("..rowid.." %in% names(tbl))
   })
-  expect_true(all(names(late$fusion$X) %in% c("..rowid..", unlist(lapply(late$fusion$per_modality, names)))))
 
   hybrid <- grf_fuse(task, "hybrid")
   expect_equal(hybrid$fusion$mode, "hybrid")
-  expect_length(hybrid$fusion$per_modality, 3)
-  expect_equal(hybrid$fusion$X, late$fusion$X)
+  expect_true(tibble::is_tibble(hybrid$fusion$X))
+  expect_equal(hybrid$fusion$X, early$fusion$X)
+  expect_equal(hybrid$fusion$per_modality, late$fusion$per_modality)
+})
+
+test_that("grf_fuse retains intersection of encoded sample ids", {
+  ids <- sprintf("S%02d", 1:4)
+  modalities <- list(
+    omics = matrix(rnorm(length(ids) * 3), nrow = 3, dimnames = list(paste0("g", 1:3), ids)),
+    clinical = data.frame(sample_id = ids, age = seq_len(length(ids)))
+  )
+  outcome <- data.frame(sample_id = ids, status = rnorm(length(ids)))
+
+  drop_first_encoder <- function(se, id_col) {
+    sample_ids <- colnames(SummarizedExperiment::assay(se))
+    keep_ids <- sample_ids[1:3]
+    tibble::tibble(`..rowid..` = keep_ids, feature = seq_along(keep_ids))
+  }
+
+  drop_last_encoder <- function(se, id_col) {
+    sample_ids <- colnames(SummarizedExperiment::assay(se))
+    keep_ids <- sample_ids[2:4]
+    tibble::tibble(`..rowid..` = keep_ids, value = seq_along(keep_ids))
+  }
+
+  task <- grf_task(modalities, outcome)
+  task <- grf_add_modality(task, "omics", drop_first_encoder)
+  task <- grf_add_modality(task, "clinical", drop_last_encoder)
+  task <- grf_encode(task)
+
+  fused <- grf_fuse(task, "hybrid")
+  expect_equal(fused$fusion$X$`..rowid..`, ids[2:3])
+  expect_equal(fused$fusion$per_modality$omics$`..rowid..`, ids[2:3])
+  expect_equal(fused$fusion$per_modality$clinical$`..rowid..`, ids[2:3])
+  expect_equal(nrow(fused$fusion$X), 2)
 })
